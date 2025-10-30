@@ -38,10 +38,35 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
         streamRef.current = stream;
         
         if (videoRef.current) {
+          console.log("📺 Setting video source...");
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setIsCameraReady(true);
-          console.log("✅ Camera preview started");
+          
+          // Add event listeners for debugging
+          videoRef.current.onloadedmetadata = () => {
+            console.log("✅ Video metadata loaded");
+          };
+          
+          videoRef.current.oncanplay = () => {
+            console.log("✅ Video can play");
+          };
+          
+          videoRef.current.onplay = () => {
+            console.log("✅ Video started playing");
+          };
+          
+          // Ensure autoplay works
+          try {
+            await videoRef.current.play();
+            setIsCameraReady(true);
+            console.log("✅ Camera preview started");
+          } catch (playError) {
+            console.error("❌ Error playing video:", playError);
+            // Try again without await
+            videoRef.current.play().catch(e => console.error("❌ Second play attempt failed:", e));
+            setIsCameraReady(true); // Set ready anyway since stream is available
+          }
+        } else {
+          console.error("❌ Video element ref is null");
         }
       } catch (error: any) {
         console.error("❌ Camera access error:", error);
@@ -151,8 +176,14 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
                 autoPlay
                 muted
                 playsInline
-                className="h-full w-full object-cover mirror"
+                className="h-full w-full object-cover"
                 style={{ transform: "scaleX(-1)" }}
+                onError={(e) => {
+                  console.error("❌ Video element error:", e);
+                }}
+                onLoadedData={() => {
+                  console.log("✅ Video data loaded");
+                }}
               />
               <div className="absolute top-4 left-4">
                 <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5">
