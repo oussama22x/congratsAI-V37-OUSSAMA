@@ -158,7 +158,7 @@ export const AuditionQuestionScreen = ({
 
             {recordingStatus === "recorded" && (
               <>
-                <div className="flex justify-center gap-4">
+                <div className="flex justify-center">
                   <Button
                     size="lg"
                     variant="outline"
@@ -167,15 +167,6 @@ export const AuditionQuestionScreen = ({
                   >
                     <Play className="h-6 w-6 mr-2" />
                     Play My Answer
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-16 px-8"
-                    onClick={handleRecordAgain}
-                  >
-                    <RotateCcw className="h-6 w-6 mr-2" />
-                    Record Again
                   </Button>
                 </div>
                 <p className="text-center text-sm text-success font-medium">

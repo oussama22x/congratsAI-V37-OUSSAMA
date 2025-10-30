@@ -124,8 +124,9 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
+    // Only call onStart - DO NOT call onClose()
+    // The modal will automatically disappear when auditionInProgress becomes true
     onStart();
-    onClose();
   };
 
   return (
