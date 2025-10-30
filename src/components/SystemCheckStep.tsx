@@ -17,6 +17,8 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+    
     // Request camera access
     const setupCamera = async () => {
       try {
@@ -35,43 +37,64 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
         });
         
         console.log("✅ Camera access granted:", stream.getVideoTracks());
+        
+        if (!mounted) {
+          console.log("⚠️ Component unmounted, stopping stream");
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        
         streamRef.current = stream;
         
-        if (videoRef.current) {
-          console.log("📺 Setting video source...");
-          videoRef.current.srcObject = stream;
-          
-          // Add event listeners for debugging
-          videoRef.current.onloadedmetadata = () => {
-            console.log("✅ Video metadata loaded");
-          };
-          
-          videoRef.current.oncanplay = () => {
-            console.log("✅ Video can play");
-          };
-          
-          videoRef.current.onplay = () => {
-            console.log("✅ Video started playing");
-          };
-          
-          // Ensure autoplay works
-          try {
-            await videoRef.current.play();
-            setIsCameraReady(true);
-            console.log("✅ Camera preview started");
-          } catch (playError) {
-            console.error("❌ Error playing video:", playError);
-            // Try again without await
-            videoRef.current.play().catch(e => console.error("❌ Second play attempt failed:", e));
-            setIsCameraReady(true); // Set ready anyway since stream is available
+        // Wait for video element to be available
+        const attachStream = () => {
+          if (videoRef.current) {
+            console.log("📺 Setting video source...");
+            videoRef.current.srcObject = stream;
+            
+            // Add event listeners for debugging
+            videoRef.current.onloadedmetadata = () => {
+              console.log("✅ Video metadata loaded");
+            };
+            
+            videoRef.current.oncanplay = () => {
+              console.log("✅ Video can play");
+            };
+            
+            videoRef.current.onplay = () => {
+              console.log("✅ Video started playing");
+            };
+            
+            // Ensure autoplay works
+            videoRef.current.play()
+              .then(() => {
+                console.log("✅ Camera preview started");
+                if (mounted) {
+                  setIsCameraReady(true);
+                }
+              })
+              .catch((playError) => {
+                console.error("❌ Error playing video:", playError);
+                // Set ready anyway since stream is available
+                if (mounted) {
+                  setIsCameraReady(true);
+                }
+              });
+          } else {
+            console.log("⏳ Video element not ready, retrying in 100ms...");
+            setTimeout(attachStream, 100);
           }
-        } else {
-          console.error("❌ Video element ref is null");
-        }
+        };
+        
+        // Start trying to attach stream
+        attachStream();
+        
       } catch (error: any) {
         console.error("❌ Camera access error:", error);
         console.error("Error name:", error.name);
         console.error("Error message:", error.message);
+        
+        if (!mounted) return;
         
         // Handle different error types
         if (error.name === "NotFoundError") {
@@ -87,9 +110,9 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
     };
 
     setupCamera();
-
-    // Cleanup function to stop camera when component unmounts
+    
     return () => {
+      mounted = false;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
