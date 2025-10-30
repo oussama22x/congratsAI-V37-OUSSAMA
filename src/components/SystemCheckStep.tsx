@@ -20,6 +20,13 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
     // Request camera access
     const setupCamera = async () => {
       try {
+        console.log("🎥 Requesting camera access...");
+        
+        // Check if mediaDevices API is available
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("MediaDevices API not supported in this browser");
+        }
+        
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             width: { ideal: 1280 },
@@ -27,23 +34,29 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
           } 
         });
         
+        console.log("✅ Camera access granted:", stream.getVideoTracks());
         streamRef.current = stream;
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
           setIsCameraReady(true);
+          console.log("✅ Camera preview started");
         }
       } catch (error: any) {
-        console.error("Camera access denied:", error);
+        console.error("❌ Camera access error:", error);
+        console.error("Error name:", error.name);
+        console.error("Error message:", error.message);
         
         // Handle different error types
         if (error.name === "NotFoundError") {
           setCameraError("No camera device found. You can continue without camera verification for testing purposes.");
         } else if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
           setCameraError("Camera permission denied. Please allow camera access in your browser settings.");
+        } else if (error.message.includes("not supported")) {
+          setCameraError("Your browser doesn't support camera access. Please use Chrome, Firefox, or Edge.");
         } else {
-          setCameraError("Unable to access camera. You can continue anyway for testing purposes.");
+          setCameraError(`Unable to access camera: ${error.message}. You can continue anyway for testing purposes.`);
         }
       }
     };
