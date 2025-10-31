@@ -7,6 +7,7 @@ import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useCountdownTimer } from "@/hooks/useCountdownTimer";
 import { useToast } from "@/hooks/use-toast";
 import { BackgroundCamera } from "@/components/BackgroundCamera";
+import "./AuditionQuestionScreen.css";
 
 interface Question {
   id: string;
@@ -34,6 +35,7 @@ export const AuditionQuestionScreen = ({
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isOvertime, setIsOvertime] = useState(false); // NEW: Overtime warning state
   const { toast } = useToast();
   
   // Audio recording hook
@@ -52,20 +54,23 @@ export const AuditionQuestionScreen = ({
     startTimer: startMasterTimer 
   } = useCountdownTimer(1800);
 
-  // Per-Question Timer: Gets duration from current question
+  // Get current question
   const currentQuestion = questions[currentQuestionIndex];
   
   // Handle both frontend and backend question formats
   const questionText = currentQuestion.text || currentQuestion.question_text || 'Question';
-  const questionDuration = currentQuestion.duration || currentQuestion.time_limit_seconds || 120;
+  const officialTime = currentQuestion.duration || currentQuestion.time_limit_seconds || 60; // Official time limit
+  const hardLimit = 120; // Always 2 minutes hard limit
   
+  // Per-Question Timer: Countdown from 120 seconds (hard limit)
   const { 
-    timer: questionTimer, 
+    timer: questionTimer,
+    rawTimer: currentTimeInSeconds, // Get raw seconds value
     isTimeUp: isQuestionTimeUp, 
     startTimer: startQuestionTimer,
     stopTimer: stopQuestionTimer,
     resetTimer: resetQuestionTimer 
-  } = useCountdownTimer(questionDuration);
+  } = useCountdownTimer(hardLimit); // Always start at 120 seconds
 
   const progressPercentage = ((currentQuestionIndex + 1) / questions.length) * 100;
 
@@ -73,6 +78,20 @@ export const AuditionQuestionScreen = ({
   useEffect(() => {
     startMasterTimer();
   }, []);
+
+  // Check for overtime when timer reaches official time
+  useEffect(() => {
+    // When countdown reaches the official time (e.g., 60s or 90s remaining), trigger overtime
+    if (currentTimeInSeconds === officialTime && !isOvertime) {
+      setIsOvertime(true);
+      console.log(`⚠️ Official time reached! Timer at ${currentTimeInSeconds}s (official limit: ${officialTime}s)`);
+    }
+  }, [currentTimeInSeconds, officialTime, isOvertime]);
+
+  // Reset overtime flag when question changes
+  useEffect(() => {
+    setIsOvertime(false);
+  }, [currentQuestionIndex]);
 
   // Auto-advance when question timer expires
   useEffect(() => {
@@ -285,15 +304,15 @@ export const AuditionQuestionScreen = ({
               </h2>
             </div>
 
-            {/* Per-Question Timer */}
+            {/* Per-Question Timer - Countdown with Overtime Glow */}
             <div className="flex justify-center">
               <div className={`rounded-lg px-8 py-4 ${
                 recordingStatus === "recording" 
-                  ? "bg-destructive/10 border border-destructive/20" 
+                  ? "bg-primary/10 border border-primary/20" 
                   : "bg-muted"
               }`}>
                 <p className={`text-4xl font-mono font-bold tabular-nums ${
-                  recordingStatus === "recording" ? "text-destructive" : ""
+                  isOvertime ? 'timer-overtime' : 'timer-normal'
                 }`}>
                   {questionTimer}
                 </p>
@@ -318,7 +337,7 @@ export const AuditionQuestionScreen = ({
                     </Button>
                   </div>
                   <p className="text-center text-sm text-muted-foreground">
-                    Click to start recording your answer ({Math.floor(questionDuration / 60)} minutes max)
+                    Click to start recording your answer (2 minutes max)
                   </p>
                 </>
               )}

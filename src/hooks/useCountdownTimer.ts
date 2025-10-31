@@ -55,6 +55,7 @@ export const useCountdownTimer = (initialDuration: number) => {
 
   return {
     timer: formatTimer(),
+    rawTimer: timer, // Return raw timer value for overtime checking
     isTimeUp,
     startTimer,
     stopTimer,
