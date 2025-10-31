@@ -6,6 +6,7 @@ import { Mic, Square, Clock, Loader2 } from "lucide-react";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useCountdownTimer } from "@/hooks/useCountdownTimer";
 import { useToast } from "@/hooks/use-toast";
+import { BackgroundCamera } from "@/components/BackgroundCamera";
 
 interface Question {
   id: string;
@@ -19,6 +20,7 @@ interface AuditionQuestionScreenProps {
   questions: Question[];
   opportunityId: string;
   userId: string;
+  cameraStream?: MediaStream | null;
   onComplete: () => void;
 }
 
@@ -26,6 +28,7 @@ export const AuditionQuestionScreen = ({
   questions,
   opportunityId,
   userId,
+  cameraStream,
   onComplete 
 }: AuditionQuestionScreenProps) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -224,6 +227,16 @@ export const AuditionQuestionScreen = ({
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {/* Background Camera Feed */}
+      {cameraStream && (
+        <BackgroundCamera 
+          stream={cameraStream} 
+          position="top-right"
+          size="sm"
+          showIndicator={true}
+        />
+      )}
+
       {/* Transitioning Screen */}
       {isTransitioning && (
         <Card className="w-full max-w-2xl">

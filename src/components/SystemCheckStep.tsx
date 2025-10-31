@@ -5,7 +5,7 @@ import { Video, CheckCircle2, AlertCircle, ArrowLeft, Camera } from "lucide-reac
 import { motion } from "framer-motion";
 
 interface SystemCheckStepProps {
-  onStart: () => void;
+  onStart: (cameraStream: MediaStream | null) => void;
   onClose: () => void;
   onBack: () => void;
 }
@@ -13,95 +13,186 @@ interface SystemCheckStepProps {
 export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepProps) => {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const auditionStartedRef = useRef(false); // Use ref instead of state for cleanup check
 
-  useEffect(() => {
-    // Guard clause: Exit early if video element doesn't exist yet
-    if (!videoRef.current) {
-      return;
+  const setupCamera = async () => {
+    let mounted = true;
+    let stream: MediaStream | null = null;
+    
+    // Reset states
+    setIsCameraReady(false);
+    setCameraError(null);
+    setIsRetrying(true);
+    
+    // Clean up existing stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
 
-    let mounted = true;
-    
-    // Request camera access
-    const setupCamera = async () => {
-      try {
-        console.log("🎥 Requesting camera access...");
-        
-        // Check if mediaDevices API is available
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("MediaDevices API not supported in this browser");
-        }
-        
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          } 
-        });
-        
-        console.log("✅ Camera access granted:", stream.getVideoTracks());
-        
-        if (!mounted) {
-          console.log("⚠️ Component unmounted, stopping stream");
-          stream.getTracks().forEach(track => track.stop());
+    try {
+      console.log("🎥 Requesting camera access...");
+      
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("MediaDevices API not supported in this browser");
+      }
+      
+      stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user"
+        } 
+      });
+      
+      console.log("✅ Camera access granted:", stream.getVideoTracks());
+      console.log("Video track settings:", stream.getVideoTracks()[0]?.getSettings());
+      
+      if (!mounted) {
+        console.log("⚠️ Component unmounted, stopping stream");
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      
+      streamRef.current = stream;
+      
+      // Small delay to ensure React has rendered the video element
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      if (!videoRef.current) {
+        throw new Error("Video element is not available");
+      }
+      
+      // Attach stream to video element
+      console.log("📺 Attaching stream to video element...");
+      
+      const videoElement = videoRef.current;
+      videoElement.srcObject = stream;
+      
+      // Wait for video to be ready and play
+      return new Promise<void>((resolve, reject) => {
+        if (!videoElement) {
+          reject(new Error("Video element is null"));
           return;
         }
-        
-        streamRef.current = stream;
-        
-        // Attach stream to video element (now guaranteed to exist)
-        if (videoRef.current) {
-          console.log("📺 Attaching stream to video element...");
-          
-          // Only attach the stream - let onLoadedMetadata handle playing
-          videoRef.current.srcObject = stream;
-          
-          console.log("✅ Stream attached - waiting for metadata to load");
-          if (mounted) {
-            setIsCameraReady(true);
-          }
-        }
-        
-      } catch (error: any) {
-        console.error("❌ Camera access error:", error);
-        console.error("Error name:", error.name);
-        console.error("Error message:", error.message);
-        
-        if (!mounted) return;
-        
-        // Handle different error types
-        if (error.name === "NotFoundError") {
-          setCameraError("No camera device found. You can continue without camera verification for testing purposes.");
-        } else if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
-          setCameraError("Camera permission denied. Please allow camera access in your browser settings.");
-        } else if (error.message.includes("not supported")) {
-          setCameraError("Your browser doesn't support camera access. Please use Chrome, Firefox, or Edge.");
-        } else {
-          setCameraError(`Unable to access camera: ${error.message}. You can continue anyway for testing purposes.`);
-        }
-      }
-    };
 
+        const onLoadedMetadata = async () => {
+          console.log("✅ Video metadata loaded");
+          try {
+            await videoElement.play();
+            console.log("✅ Video playing");
+            
+            if (mounted) {
+              setIsCameraReady(true);
+              console.log("✅ Camera ready state set to true");
+            }
+            resolve();
+          } catch (playError) {
+            console.error("❌ Error playing video:", playError);
+            // Even if play fails, mark as ready since the stream is attached
+            if (mounted) {
+              setIsCameraReady(true);
+            }
+            resolve(); // Still resolve, don't reject
+          }
+        };
+
+        const onError = (e: Event) => {
+          console.error("❌ Video element error:", e);
+          reject(new Error("Video element error"));
+        };
+
+        videoElement.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+        videoElement.addEventListener('error', onError, { once: true });
+
+        // Timeout fallback
+        setTimeout(() => {
+          videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
+          videoElement.removeEventListener('error', onError);
+          
+          // If we got here and video is playing, consider it success
+          if (!videoElement.paused) {
+            console.log("✅ Video is playing (timeout fallback)");
+            if (mounted) {
+              setIsCameraReady(true);
+            }
+            resolve();
+          } else {
+            console.warn("⚠️ Video timeout - forcing ready state");
+            if (mounted) {
+              setIsCameraReady(true);
+            }
+            resolve();
+          }
+        }, 3000);
+      });
+      
+    } catch (error: any) {
+      console.error("❌ Camera access error:", error);
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      
+      if (!mounted) return;
+      
+      // Handle different error types
+      if (error.name === "NotFoundError") {
+        setCameraError("No camera device found. You can continue without camera verification for testing purposes.");
+      } else if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+        setCameraError("Camera permission denied. Please allow camera access in your browser settings and click Retry.");
+      } else if (error.message.includes("not supported")) {
+        setCameraError("Your browser doesn't support camera access. Please use Chrome, Firefox, or Edge.");
+      } else if (error.message.includes("failed to render")) {
+        setCameraError("Video element failed to load. Please try again or continue anyway for testing.");
+      } else {
+        setCameraError(`Unable to access camera: ${error.message}. You can continue anyway for testing purposes.`);
+      }
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  useEffect(() => {
     setupCamera();
     
     return () => {
-      mounted = false;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+      // Only clean up if audition hasn't started
+      if (!auditionStartedRef.current) {
+        console.log("🧹 Cleaning up camera stream (component unmount - no audition started)");
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => {
+            track.stop();
+            console.log("🛑 Stopped track:", track.label);
+          });
+          streamRef.current = null;
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+        }
+      } else {
+        console.log("🎥 Camera stream kept active for audition (cleanup skipped)");
       }
     };
-  }, [videoRef]);
+  }, []);
 
   const handleStartAudition = () => {
-    // Stop the camera before starting the audition
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
-    // Only call onStart - DO NOT call onClose()
-    // The modal will automatically disappear when auditionInProgress becomes true
-    onStart();
+    // Keep the camera running - pass the stream to the parent
+    // DO NOT stop the stream here - it will be cleaned up when audition completes
+    console.log("🎥 Keeping camera stream active for audition");
+    console.log("Stream reference:", streamRef.current);
+    console.log("Active tracks:", streamRef.current?.getTracks());
+    
+    // Mark that audition has started to prevent cleanup
+    auditionStartedRef.current = true;
+    
+    // Pass the camera stream to the parent component
+    onStart(streamRef.current);
   };
 
   return (
@@ -147,61 +238,62 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
       <div className="space-y-3">
         <p className="text-sm font-medium">Camera Preview</p>
         <div className="relative aspect-video w-full overflow-hidden rounded-lg border-2 border-primary/20 bg-black">
-          {cameraError ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+          {/* Always render video element, but hide it when not ready */}
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className={`h-full w-full object-cover ${isCameraReady ? 'opacity-100' : 'opacity-0'}`}
+            style={{ transform: "scaleX(-1)" }}
+          />
+          
+          {/* Live indicator - only show when ready */}
+          {isCameraReady && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              className="absolute top-4 left-4 z-10"
+            >
+              <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5">
+                <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-xs text-white font-medium">Live</span>
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Error overlay */}
+          {cameraError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-black/80 z-20">
               <AlertCircle className="h-16 w-16 text-yellow-600 dark:text-yellow-400 mb-4" />
               <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium mb-2">Camera Unavailable</p>
-              <p className="text-xs text-muted-foreground max-w-md">{cameraError}</p>
-              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+              <p className="text-xs text-muted-foreground max-w-md mb-4">{cameraError}</p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={setupCamera}
+                disabled={isRetrying}
+                className="mb-3"
+              >
+                {isRetrying ? "Retrying..." : "Retry Camera Access"}
+              </Button>
+              <div className="mt-2 p-3 bg-muted/50 rounded-lg">
                 <p className="text-xs text-muted-foreground">
                   For production use, camera verification is required. In testing mode, you can proceed without it.
                 </p>
               </div>
             </div>
-          ) : !isCameraReady ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
+          )}
+          
+          {/* Loading overlay */}
+          {!isCameraReady && !cameraError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
               <Video className="h-16 w-16 text-muted-foreground mb-4 animate-pulse" />
-              <p className="text-sm text-muted-foreground">Initializing camera...</p>
+              <p className="text-sm text-muted-foreground">
+                {isRetrying ? "Retrying camera access..." : "Initializing camera..."}
+              </p>
             </div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              className="absolute inset-0"
-            >
-              <video
-                ref={videoRef}
-                autoPlay
-                muted
-                playsInline
-                className="h-full w-full object-cover"
-                style={{ transform: "scaleX(-1)" }}
-                onLoadedMetadata={() => {
-                  console.log("✅ Video metadata loaded - playing video");
-                  if (videoRef.current) {
-                    videoRef.current.play().catch(error => {
-                      console.error("❌ Error playing video:", error);
-                    });
-                  }
-                }}
-                onError={(e) => {
-                  console.error("❌ Video element error:", e);
-                }}
-                onLoadedData={() => {
-                  console.log("✅ Video data loaded");
-                }}
-                onPlay={() => {
-                  console.log("✅ Video started playing");
-                }}
-              />
-              <div className="absolute top-4 left-4">
-                <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5">
-                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-xs text-white font-medium">Live</span>
-                </div>
-              </div>
-            </motion.div>
           )}
         </div>
         {isCameraReady && (

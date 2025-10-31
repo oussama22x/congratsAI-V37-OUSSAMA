@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { AuditionStartModal } from "@/components/AuditionStartModal";
 import { AuditionQuestionScreen } from "@/components/AuditionQuestionScreen";
@@ -37,12 +37,19 @@ const Opportunities = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // State to track user's submissions (prevent duplicate applications)
+  const [userSubmissions, setUserSubmissions] = useState<Set<string>>(new Set());
+  const [submissionsLoading, setSubmissionsLoading] = useState(true);
+  
   // State for modal
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   // State for audition flow
   const [auditionInProgress, setAuditionInProgress] = useState(false);
   const [auditionComplete, setAuditionComplete] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  
+  // Camera stream state
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   const { toast } = useToast();
 
@@ -87,22 +94,123 @@ const Opportunities = () => {
     fetchOpportunities();
   }, [toast]);
 
+  // Fetch user's submissions to check for duplicates
+  useEffect(() => {
+    const fetchUserSubmissions = async () => {
+      if (!currentUser?.id) {
+        setSubmissionsLoading(false);
+        return;
+      }
+
+      try {
+        setSubmissionsLoading(true);
+        const response = await fetch(`${BACKEND_URL}/api/submissions?userId=${currentUser.id}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch user submissions');
+        }
+        
+        const result = await response.json();
+        const submissions = result.data || result;
+        
+        // Create a Set of opportunity IDs the user has already applied to
+        const appliedOpportunityIds = new Set<string>(
+          submissions.map((sub: any) => sub.opportunityId || sub.opportunity_id as string)
+        );
+        
+        console.log('✅ User has applied to opportunities:', Array.from(appliedOpportunityIds));
+        console.log(`📊 Total applications: ${appliedOpportunityIds.size}`);
+        setUserSubmissions(appliedOpportunityIds);
+      } catch (err) {
+        console.error('❌ Error fetching user submissions:', err);
+        // Don't show error to user, just log it
+        // Users can still see opportunities even if this fails
+      } finally {
+        setSubmissionsLoading(false);
+      }
+    };
+
+    fetchUserSubmissions();
+  }, [currentUser?.id]);
+
+  // Cleanup camera stream on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStreamRef.current) {
+        console.log("🧹 Cleaning up camera stream (component unmount)");
+        cameraStreamRef.current.getTracks().forEach(track => track.stop());
+        cameraStreamRef.current = null;
+      }
+    };
+  }, []);
+
   // Handler functions
   const handleStartAudition = (opportunity: Opportunity) => {
+    // Wait until submissions are loaded before allowing start
+    if (submissionsLoading) {
+      console.log("⚠️ Still checking submission status, please wait...");
+      toast({
+        title: "Please Wait",
+        description: "Checking your application status...",
+        variant: "default",
+      });
+      return;
+    }
+    
+    // Check if user has already applied to this opportunity
+    if (userSubmissions.has(opportunity.id)) {
+      console.log("❌ Already applied to:", opportunity.title);
+      toast({
+        title: "Already Applied",
+        description: "You have already submitted an audition for this opportunity.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setSelectedOpportunity(opportunity);
   };
 
   const handleCloseModal = () => {
     setSelectedOpportunity(null);
+    // Clean up camera if modal is closed without starting audition
+    if (cameraStreamRef.current) {
+      console.log("🧹 Cleaning up camera stream (modal closed)");
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      cameraStreamRef.current = null;
+    }
   };
 
-  const handleBeginAudition = () => {
+  const handleBeginAudition = (cameraStream: MediaStream | null) => {
+    console.log("🎬 Beginning audition with camera stream:", cameraStream);
+    if (cameraStream) {
+      console.log("Stream active:", cameraStream.active);
+      console.log("Stream tracks:", cameraStream.getTracks());
+      console.log("Video tracks:", cameraStream.getVideoTracks().map(t => ({
+        id: t.id,
+        label: t.label,
+        enabled: t.enabled,
+        readyState: t.readyState,
+        muted: t.muted
+      })));
+    }
+    cameraStreamRef.current = cameraStream;
     setAuditionInProgress(true);
   };
 
   // NEW: Handler when all questions are completed
   const handleQuestionsComplete = async () => {
     console.log('✅ All questions completed - creating submission record');
+    
+    // Clean up camera stream
+    if (cameraStreamRef.current) {
+      console.log("🧹 Cleaning up camera stream (audition complete)");
+      cameraStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        console.log("🛑 Stopped camera track:", track.label);
+      });
+      cameraStreamRef.current = null;
+    }
     
     if (!selectedOpportunity || !currentUser?.id) {
       console.error('❌ Missing opportunity or user ID');
@@ -141,6 +249,17 @@ const Opportunities = () => {
       console.log('✅ Submission saved to database - will appear in "My Applications"');
       setSubmissionId(submissionId);
       
+      // Add this opportunity to the user's submissions set IMMEDIATELY
+      if (selectedOpportunity?.id) {
+        const opportunityId = selectedOpportunity.id;
+        setUserSubmissions(prev => {
+          const newSet = new Set([...prev, opportunityId]);
+          console.log('📝 Updated applied list:', Array.from(newSet));
+          console.log('🔍 Has this opportunity now?', newSet.has(opportunityId));
+          return newSet;
+        });
+      }
+      
       // Go directly to AuditionCompleteScreen (which has the survey built-in)
       setAuditionInProgress(false);
       setAuditionComplete(true);
@@ -164,6 +283,13 @@ const Opportunities = () => {
   };
 
   const handleReturnToDashboard = () => {
+    // Clean up camera if still running
+    if (cameraStreamRef.current) {
+      console.log("🧹 Cleaning up camera stream (return to dashboard)");
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      cameraStreamRef.current = null;
+    }
+    
     setAuditionComplete(false);
     setSelectedOpportunity(null);
   };
@@ -185,6 +311,7 @@ const Opportunities = () => {
         questions={selectedOpportunity.questions}
         opportunityId={selectedOpportunity.id}
         userId={currentUser.id}
+        cameraStream={cameraStreamRef.current}
         onComplete={handleQuestionsComplete}
       />
     );
@@ -229,6 +356,8 @@ const Opportunities = () => {
                 type={opportunity.type}
                 rate={opportunity.rate}
                 skills={opportunity.skills}
+                hasApplied={userSubmissions.has(opportunity.id)}
+                isCheckingStatus={submissionsLoading}
                 onStartAudition={() => handleStartAudition(opportunity)}
               />
             ))}

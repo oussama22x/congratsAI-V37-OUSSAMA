@@ -10,7 +10,7 @@ interface AuditionStartModalProps {
     company: string;
   };
   onClose: () => void;
-  onStart: () => void;
+  onStart: (cameraStream: MediaStream | null) => void;
 }
 
 export const AuditionStartModal = ({ opportunity, onClose, onStart }: AuditionStartModalProps) => {
