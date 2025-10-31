@@ -55,35 +55,12 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
         if (videoRef.current) {
           console.log("📺 Attaching stream to video element...");
           
-          // Step 1: Attach the stream
+          // Only attach the stream - let onLoadedMetadata handle playing
           videoRef.current.srcObject = stream;
           
-          // Add event listeners for debugging
-          videoRef.current.onloadedmetadata = () => {
-            console.log("✅ Video metadata loaded");
-          };
-          
-          videoRef.current.oncanplay = () => {
-            console.log("✅ Video can play");
-          };
-          
-          videoRef.current.onplay = () => {
-            console.log("✅ Video started playing");
-          };
-          
-          // Step 2: Tell it to play (critical step!)
-          try {
-            await videoRef.current.play();
-            console.log("✅ Camera preview started successfully");
-            if (mounted) {
-              setIsCameraReady(true);
-            }
-          } catch (playError) {
-            console.error("❌ Error playing video:", playError);
-            // Set ready anyway since stream is available
-            if (mounted) {
-              setIsCameraReady(true);
-            }
+          console.log("✅ Stream attached - waiting for metadata to load");
+          if (mounted) {
+            setIsCameraReady(true);
           }
         }
         
@@ -200,11 +177,22 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
                 playsInline
                 className="h-full w-full object-cover"
                 style={{ transform: "scaleX(-1)" }}
+                onLoadedMetadata={() => {
+                  console.log("✅ Video metadata loaded - playing video");
+                  if (videoRef.current) {
+                    videoRef.current.play().catch(error => {
+                      console.error("❌ Error playing video:", error);
+                    });
+                  }
+                }}
                 onError={(e) => {
                   console.error("❌ Video element error:", e);
                 }}
                 onLoadedData={() => {
                   console.log("✅ Video data loaded");
+                }}
+                onPlay={() => {
+                  console.log("✅ Video started playing");
                 }}
               />
               <div className="absolute top-4 left-4">
