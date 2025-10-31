@@ -17,6 +17,11 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
+    // Guard clause: Exit early if video element doesn't exist yet
+    if (!videoRef.current) {
+      return;
+    }
+
     let mounted = true;
     
     // Request camera access
@@ -46,48 +51,41 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
         
         streamRef.current = stream;
         
-        // Wait for video element to be available
-        const attachStream = () => {
-          if (videoRef.current) {
-            console.log("📺 Setting video source...");
-            videoRef.current.srcObject = stream;
-            
-            // Add event listeners for debugging
-            videoRef.current.onloadedmetadata = () => {
-              console.log("✅ Video metadata loaded");
-            };
-            
-            videoRef.current.oncanplay = () => {
-              console.log("✅ Video can play");
-            };
-            
-            videoRef.current.onplay = () => {
-              console.log("✅ Video started playing");
-            };
-            
-            // Ensure autoplay works
-            videoRef.current.play()
-              .then(() => {
-                console.log("✅ Camera preview started");
-                if (mounted) {
-                  setIsCameraReady(true);
-                }
-              })
-              .catch((playError) => {
-                console.error("❌ Error playing video:", playError);
-                // Set ready anyway since stream is available
-                if (mounted) {
-                  setIsCameraReady(true);
-                }
-              });
-          } else {
-            console.log("⏳ Video element not ready, retrying in 100ms...");
-            setTimeout(attachStream, 100);
+        // Attach stream to video element (now guaranteed to exist)
+        if (videoRef.current) {
+          console.log("📺 Attaching stream to video element...");
+          
+          // Step 1: Attach the stream
+          videoRef.current.srcObject = stream;
+          
+          // Add event listeners for debugging
+          videoRef.current.onloadedmetadata = () => {
+            console.log("✅ Video metadata loaded");
+          };
+          
+          videoRef.current.oncanplay = () => {
+            console.log("✅ Video can play");
+          };
+          
+          videoRef.current.onplay = () => {
+            console.log("✅ Video started playing");
+          };
+          
+          // Step 2: Tell it to play (critical step!)
+          try {
+            await videoRef.current.play();
+            console.log("✅ Camera preview started successfully");
+            if (mounted) {
+              setIsCameraReady(true);
+            }
+          } catch (playError) {
+            console.error("❌ Error playing video:", playError);
+            // Set ready anyway since stream is available
+            if (mounted) {
+              setIsCameraReady(true);
+            }
           }
-        };
-        
-        // Start trying to attach stream
-        attachStream();
+        }
         
       } catch (error: any) {
         console.error("❌ Camera access error:", error);
@@ -117,7 +115,7 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [videoRef]);
 
   const handleStartAudition = () => {
     // Stop the camera before starting the audition
