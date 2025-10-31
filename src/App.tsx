@@ -12,6 +12,7 @@ import TalentDashboard from "./pages/talent/TalentDashboard";
 import ProfileWizard from "./pages/talent/ProfileWizard";
 import ProfileEditor from "./pages/talent/ProfileEditor";
 import Opportunities from "./pages/talent/Opportunities";
+import SubmissionDetailPage from "./pages/talent/SubmissionDetailPage";
 import RecruiterDashboard from "./pages/recruiter/RecruiterDashboard";
 import PartnerDashboard from "./pages/partner/PartnerDashboard";
 import NotFound from "./pages/NotFound";
@@ -60,6 +61,14 @@ const App = () => (
             element={
               <RoleGuard allowedRoles={["TALENT"]}>
                 <Opportunities />
+              </RoleGuard>
+            }
+          />
+          <Route
+            path="/applications/:submissionId"
+            element={
+              <RoleGuard allowedRoles={["TALENT"]}>
+                <SubmissionDetailPage />
               </RoleGuard>
             }
           />

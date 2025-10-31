@@ -11,12 +11,15 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserCircle, FileText, MapPin, Briefcase, DollarSign, Lock, Download, Globe, Calendar, Linkedin, X, PencilLine, ClipboardList } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { UserCircle, FileText, MapPin, Briefcase, DollarSign, Lock, Download, Globe, Calendar, Linkedin, X, PencilLine, ClipboardList, Eye } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
 import { format } from "date-fns";
 import { VettingChallengeCard } from "@/components/vetting/VettingChallengeCard";
 import { VettingChallengeDrawer } from "@/components/vetting/VettingChallengeDrawer";
-import { getSubmissions } from "@/lib/mockSubmissionStore";
+
+// Backend URL
+const BACKEND_URL = 'http://localhost:4000';
+
 const TalentDashboard = () => {
   const {
     currentUser
@@ -46,8 +49,36 @@ const TalentDashboard = () => {
   const [showCelebration, setShowCelebration] = useState(false);
   const isLoading = profileLoading || filesLoading || skillsLoading || progressLoading;
 
-  // Get submissions from mock store
-  const submissions = getSubmissions();
+  // State for submissions
+  const [submissions, setSubmissions] = useState([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(true);
+
+  // Fetch submissions from backend
+  useEffect(() => {
+    const fetchSubmissions = async () => {
+      if (!currentUser?.id) {
+        setSubmissionsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/submissions?userId=${currentUser.id}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            setSubmissions(data.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching submissions:', error);
+      } finally {
+        setSubmissionsLoading(false);
+      }
+    };
+
+    fetchSubmissions();
+  }, [currentUser?.id]);
 
   // Show celebration only once when reaching 100% AND completing vetting
   useEffect(() => {
@@ -480,7 +511,12 @@ const TalentDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {submissions.length === 0 ? (
+                  {submissionsLoading ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                      <p className="text-sm text-muted-foreground">Loading your applications...</p>
+                    </div>
+                  ) : submissions.length === 0 ? (
                     <div className="text-center py-12">
                       <ClipboardList className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
                       <h3 className="text-lg font-semibold mb-2">No Applications Yet</h3>
@@ -494,7 +530,7 @@ const TalentDashboard = () => {
                   ) : (
                     <div className="space-y-4">
                       {submissions.map((submission) => (
-                        <Card key={submission.id} className="border-2">
+                        <Card key={submission.id} className="border-2 hover:border-primary/50 transition-colors">
                           <CardContent className="pt-6">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                               <div className="flex-1">
@@ -519,16 +555,22 @@ const TalentDashboard = () => {
                                   </Badge>
                                 </div>
                               </div>
-                              <div className="flex flex-col items-end gap-2">
+                              <div className="flex flex-col items-end gap-3">
                                 <Badge 
                                   variant="secondary" 
                                   className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
                                 >
-                                  {submission.status}
+                                  {submission.status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                                 </Badge>
                                 <p className="text-xs text-muted-foreground">
                                   Submitted {format(new Date(submission.submittedAt), "MMM d, yyyy")}
                                 </p>
+                                <Link to={`/applications/${submission.id}`}>
+                                  <Button variant="outline" size="sm" className="gap-2">
+                                    <Eye className="h-4 w-4" />
+                                    Review Answers
+                                  </Button>
+                                </Link>
                               </div>
                             </div>
                           </CardContent>
