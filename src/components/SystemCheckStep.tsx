@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Video, CheckCircle2, AlertCircle, ArrowLeft, Camera } from "lucide-react";
+import { Video, CheckCircle2, AlertCircle, ArrowLeft, Camera, Mic } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface SystemCheckStepProps {
@@ -12,11 +12,71 @@ interface SystemCheckStepProps {
 
 export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepProps) => {
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isMicReady, setIsMicReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const auditionStartedRef = useRef(false); // Use ref instead of state for cleanup check
+  
+  // Mic visualizer refs
+  const audioVisualizerRef = useRef<HTMLDivElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  const setupAudioVisualizer = (stream: MediaStream) => {
+    try {
+      // Create AudioContext
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+
+      // Create source from stream
+      const source = audioContext.createMediaStreamSource(stream);
+      
+      // Create analyser
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      // Connect source to analyser
+      source.connect(analyser);
+
+      console.log("🎤 Audio visualizer setup complete");
+      setIsMicReady(true);
+
+      // Visualization loop
+      const visualize = () => {
+        animationFrameRef.current = requestAnimationFrame(visualize);
+
+        // Get time domain data
+        analyser.getByteTimeDomainData(dataArray);
+
+        // Calculate average volume
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          const value = dataArray[i] - 128; // Center around 0
+          sum += Math.abs(value);
+        }
+        const average = sum / bufferLength;
+        const volumePercentage = Math.min(100, (average / 128) * 100 * 3); // Scale up for visibility
+
+        // Update visualizer
+        if (audioVisualizerRef.current) {
+          const innerBar = audioVisualizerRef.current.querySelector('div') as HTMLDivElement;
+          if (innerBar) {
+            innerBar.style.width = `${volumePercentage}%`;
+          }
+        }
+      };
+
+      visualize();
+    } catch (error) {
+      console.error("❌ Audio visualizer setup error:", error);
+      // Don't block on audio visualizer failure
+      setIsMicReady(true);
+    }
+  };
 
   const setupCamera = async () => {
     let mounted = true;
@@ -49,11 +109,13 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
           width: { ideal: 1280 },
           height: { ideal: 720 },
           facingMode: "user"
-        } 
+        },
+        audio: true // Request audio access
       });
       
       console.log("✅ Camera access granted:", stream.getVideoTracks());
       console.log("Video track settings:", stream.getVideoTracks()[0]?.getSettings());
+      console.log("✅ Audio access granted:", stream.getAudioTracks());
       
       if (!mounted) {
         console.log("⚠️ Component unmounted, stopping stream");
@@ -62,6 +124,9 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
       }
       
       streamRef.current = stream;
+      
+      // Setup audio visualizer
+      setupAudioVisualizer(stream);
       
       // Small delay to ensure React has rendered the video element
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -162,6 +227,16 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
     setupCamera();
     
     return () => {
+      // Cancel animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      
+      // Close audio context
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      
       // Only clean up if audition hasn't started
       if (!auditionStartedRef.current) {
         console.log("🧹 Cleaning up camera stream (component unmount - no audition started)");
@@ -201,10 +276,10 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Camera className="h-6 w-6 text-primary" />
-          <h2 className="text-2xl font-bold">System & Camera Check</h2>
+          <h2 className="text-2xl font-bold">System Check</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          We need to verify your camera is working to ensure the integrity of the audition process.
+          We need to verify your camera and microphone are working to ensure the integrity of the audition process.
         </p>
       </div>
 
@@ -232,6 +307,56 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
         <Badge variant={isCameraReady ? "default" : "secondary"}>
           {isCameraReady ? "Ready" : "Waiting"}
         </Badge>
+      </div>
+
+      {/* Microphone Status */}
+      <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/50">
+        <div className="flex items-center gap-3">
+          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+            isMicReady 
+              ? "bg-green-100 dark:bg-green-900/30" 
+              : "bg-yellow-100 dark:bg-yellow-900/30"
+          }`}>
+            {isMicReady ? (
+              <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+            ) : (
+              <Mic className="h-6 w-6 text-yellow-600 dark:text-yellow-400 animate-pulse" />
+            )}
+          </div>
+          <div>
+            <p className="font-medium">Microphone Status</p>
+            <p className="text-sm text-muted-foreground">
+              {isMicReady ? "Microphone is working" : "Requesting microphone permission..."}
+            </p>
+          </div>
+        </div>
+        <Badge variant={isMicReady ? "default" : "secondary"}>
+          {isMicReady ? "Ready" : "Waiting"}
+        </Badge>
+      </div>
+
+      {/* Microphone Check */}
+      <div className="space-y-3">
+        <p className="text-sm font-medium">Mic Check</p>
+        {!isMicReady && (
+          <p className="text-sm text-muted-foreground">Please say something...</p>
+        )}
+        {isMicReady && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Speak to see the volume indicator
+            </p>
+            <div 
+              ref={audioVisualizerRef}
+              className="w-full h-3 bg-muted rounded-full overflow-hidden border"
+            >
+              <div 
+                className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-100"
+                style={{ width: '0%' }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Video Preview */}
@@ -304,7 +429,7 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
       </div>
 
       {/* Proctoring Notice */}
-      {isCameraReady && (
+      {(isCameraReady && isMicReady) && (
         <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900 p-4">
           <div className="flex gap-3">
             <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
@@ -313,7 +438,7 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
                 Proctoring Notice
               </p>
               <p className="text-xs text-blue-800 dark:text-blue-200">
-                Your camera will be used to verify your identity during this audition. 
+                Your camera and microphone will be used to verify your identity and record your responses during this audition. 
                 This helps maintain the integrity and fairness of the assessment process.
               </p>
             </div>
@@ -336,14 +461,14 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
           size="lg"
           className="flex-1 text-lg h-14 font-semibold"
           onClick={handleStartAudition}
-          disabled={false}
+          disabled={!isCameraReady || !isMicReady}
         >
-          {isCameraReady ? "Start Audition" : cameraError ? "Continue Anyway (Testing)" : "Waiting for Camera..."}
+          {(isCameraReady && isMicReady) ? "Start Audition" : cameraError ? "Continue Anyway (Testing)" : "Waiting for Camera & Microphone..."}
         </Button>
       </div>
-      {!isCameraReady && !cameraError && (
+      {(!isCameraReady || !isMicReady) && !cameraError && (
         <p className="text-xs text-muted-foreground text-center">
-          Please allow camera access in your browser to continue
+          Please allow camera and microphone access in your browser to continue
         </p>
       )}
       {cameraError && (

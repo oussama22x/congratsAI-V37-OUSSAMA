@@ -36,6 +36,7 @@ export const AuditionQuestionScreen = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isOvertime, setIsOvertime] = useState(false); // NEW: Overtime warning state
+  const [hasRecordingStarted, setHasRecordingStarted] = useState(false); // NEW: Track if recording has started
   const { toast } = useToast();
   
   // Audio recording hook
@@ -92,6 +93,7 @@ export const AuditionQuestionScreen = ({
   useEffect(() => {
     console.log(`🔄 Question changed to ${currentQuestionIndex + 1}, resetting overtime state`);
     setIsOvertime(false);
+    setHasRecordingStarted(false); // Reset question visibility for new question
     resetQuestionTimer();
   }, [currentQuestionIndex]);
 
@@ -156,6 +158,7 @@ export const AuditionQuestionScreen = ({
 
   const handleStartRecording = () => {
     setIsOvertime(false); // Reset overtime when starting recording
+    setHasRecordingStarted(true); // Show the question text and start timer
     startRecording();
     startQuestionTimer();
   };
@@ -228,6 +231,7 @@ export const AuditionQuestionScreen = ({
         setCurrentQuestionIndex(currentQuestionIndex + 1);
         resetRecording();
         resetQuestionTimer();
+        setHasRecordingStarted(false); // Reset for next question
       } else {
         // Last question - navigate to survey
         console.log('🎉 All questions completed - navigating to survey');
@@ -302,9 +306,15 @@ export const AuditionQuestionScreen = ({
           <CardContent className="space-y-8">
             {/* Question Text */}
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-8 text-center">
-              <h2 className="text-3xl font-bold leading-relaxed">
-                {questionText}
-              </h2>
+              {!hasRecordingStarted ? (
+                <h2 className="text-3xl font-bold leading-relaxed text-muted-foreground">
+                  Click the record button to see the question and start the timer.
+                </h2>
+              ) : (
+                <h2 className="text-3xl font-bold leading-relaxed">
+                  {questionText}
+                </h2>
+              )}
             </div>
 
             {/* Per-Question Timer - Countdown with Overtime Glow */}
