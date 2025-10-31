@@ -82,15 +82,17 @@ export const AuditionQuestionScreen = ({
   // Check for overtime when timer reaches official time
   useEffect(() => {
     // When countdown reaches the official time (e.g., 60s or 90s remaining), trigger overtime
-    if (currentTimeInSeconds === officialTime && !isOvertime) {
+    if (currentTimeInSeconds === officialTime && !isOvertime && recordingStatus === "recording") {
       setIsOvertime(true);
       console.log(`⚠️ Official time reached! Timer at ${currentTimeInSeconds}s (official limit: ${officialTime}s)`);
     }
-  }, [currentTimeInSeconds, officialTime, isOvertime]);
+  }, [currentTimeInSeconds, officialTime, isOvertime, recordingStatus]);
 
-  // Reset overtime flag when question changes
+  // Reset overtime flag and timer when question changes
   useEffect(() => {
+    console.log(`🔄 Question changed to ${currentQuestionIndex + 1}, resetting overtime state`);
     setIsOvertime(false);
+    resetQuestionTimer();
   }, [currentQuestionIndex]);
 
   // Auto-advance when question timer expires
@@ -153,6 +155,7 @@ export const AuditionQuestionScreen = ({
   };
 
   const handleStartRecording = () => {
+    setIsOvertime(false); // Reset overtime when starting recording
     startRecording();
     startQuestionTimer();
   };
