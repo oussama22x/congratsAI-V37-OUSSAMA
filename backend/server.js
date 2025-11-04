@@ -323,33 +323,38 @@ app.post('/api/audition/submit-answer', upload.single('audio_file'), async (req,
       .from('audition-recordings')
       .getPublicUrl(filePath);
 
-    // C. Transcribe Audio with Gemini AI
+    const audio_url = publicUrl; // Store for clarity
+
+    // C. Transcribe Audio with Gemini AI (New URI Method)
     let transcript = null; // Default to null in case of error
     
     if (genAI) {
-      console.log('🎤 Transcribing audio with Gemini AI...');
+      console.log('🎤 Starting transcription with Gemini (URI method)...');
       
       try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         
-        // Convert the buffer to the format Gemini needs
-        const audioPart = {
-          inlineData: {
-            data: file.buffer.toString("base64"),
-            mimeType: file.mimetype // e.g., 'audio/webm'
+        // NEW: Use the file URI (Supabase URL) instead of the buffer
+        const audioFile = {
+          fileData: {
+            mimeType: file.mimetype, // e.g., 'audio/webm'
+            fileUri: audio_url         // The public URL from Supabase
           }
         };
 
         const prompt = "Transcribe this audio file. Return only the text.";
 
-        const result = await model.generateContent([prompt, audioPart]);
+        const result = await model.generateContent([prompt, audioFile]);
         transcript = result.response.text();
-        console.log(`✅ Transcription complete: "${transcript.substring(0, 100)}${transcript.length > 100 ? '...' : ''}"`);
+        console.log('✅ Transcription successful.');
+        console.log(`   Preview: "${transcript.substring(0, 100)}${transcript.length > 100 ? '...' : ''}"`);
 
       } catch (transcriptionError) {
-        console.error('⚠️  Gemini Transcription Failed:', transcriptionError.message);
-        // Do not stop the request. We will just save 'null'
-        // This is a "soft fail"
+        console.error('--- GEMINI TRANSCRIPTION FAILED ---');
+        // Log the full, detailed error for debugging
+        console.error(JSON.stringify(transcriptionError, null, 2));
+        console.error('--- END OF ERROR ---');
+        // Soft fail - we will just save 'null'
         transcript = null;
       }
     } else {
@@ -367,7 +372,7 @@ app.post('/api/audition/submit-answer', upload.single('audio_file'), async (req,
         opportunity_id: opportunityId,
         question_id: questionId,
         question_text: questionText,
-        audio_url: publicUrl,
+        audio_url: audio_url,
         audio_path: filePath,
         transcript: transcript,
         submitted_at: new Date().toISOString()
