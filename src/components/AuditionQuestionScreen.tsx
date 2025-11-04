@@ -225,9 +225,9 @@ export const AuditionQuestionScreen = ({
         description: `Question ${currentQuestionIndex + 1} recorded successfully!`,
       });
 
-      // 5. Show "Transitioning..." screen for 5 seconds
+      // 5. Show "Transitioning..." screen for 3 seconds
       setIsTransitioning(true);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       setIsTransitioning(false);
 
       // 6. Advance to next question or complete

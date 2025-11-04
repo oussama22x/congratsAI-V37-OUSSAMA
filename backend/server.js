@@ -325,36 +325,33 @@ app.post('/api/audition/submit-answer', upload.single('audio_file'), async (req,
 
     const audio_url = publicUrl; // Store for clarity
 
-    // C. Transcribe Audio with Gemini AI (Buffer Method)
+    // C. Transcribe Audio with Gemini AI (New URI Method)
     let transcript = null; // Default to null in case of error
     
     if (genAI) {
-      console.log('🎤 Starting transcription with Gemini (Buffer method)...');
+      console.log('🎤 Starting transcription with Gemini (URI method)...');
       
       try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         
-        // Convert the file buffer to Base64
-        const base64Audio = file.buffer.toString("base64");
-
-        // Create the audio part using inlineData
-        const audioPart = {
-          inlineData: {
-            data: base64Audio,
-            mimeType: file.mimetype // e.g., 'audio/webm'
+        // NEW: Use the file URI (Supabase URL) instead of the buffer
+        const audioFile = {
+          fileData: {
+            mimeType: file.mimetype, // e.g., 'audio/webm'
+            fileUri: audio_url         // The public URL from Supabase
           }
         };
 
         const prompt = "Transcribe this audio file. Return only the text.";
 
-        // Send the prompt and the audio buffer
-        const result = await model.generateContent([prompt, audioPart]);
+        const result = await model.generateContent([prompt, audioFile]);
         transcript = result.response.text();
         console.log('✅ Transcription successful.');
         console.log(`   Preview: "${transcript.substring(0, 100)}${transcript.length > 100 ? '...' : ''}"`);
 
       } catch (transcriptionError) {
         console.error('--- GEMINI TRANSCRIPTION FAILED ---');
+        // Log the full, detailed error for debugging
         console.error(JSON.stringify(transcriptionError, null, 2));
         console.error('--- END OF ERROR ---');
         // Soft fail - we will just save 'null'
