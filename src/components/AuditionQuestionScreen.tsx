@@ -35,7 +35,6 @@ export const AuditionQuestionScreen = ({
   onComplete 
 }: AuditionQuestionScreenProps) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isOvertime, setIsOvertime] = useState(false); // NEW: Overtime warning state
   const { toast } = useToast();
@@ -81,14 +80,20 @@ export const AuditionQuestionScreen = ({
     startMasterTimer();
   }, []);
 
-  // Check for overtime when timer reaches official time
+  // Check for overtime when timer reaches 30 seconds or less
   useEffect(() => {
-    // When countdown reaches the official time (e.g., 60s or 90s remaining), trigger overtime
-    if (currentTimeInSeconds === officialTime && !isOvertime && recordingStatus === "recording") {
-      setIsOvertime(true);
-      console.log(`⚠️ Official time reached! Timer at ${currentTimeInSeconds}s (official limit: ${officialTime}s)`);
+    // Timer turns red when 30 seconds or less remaining
+    if (currentTimeInSeconds <= 30 && currentTimeInSeconds > 0) {
+      if (!isOvertime) {
+        setIsOvertime(true);
+        console.log(`⚠️ Timer warning! ${currentTimeInSeconds}s remaining`);
+      }
+    } else {
+      if (isOvertime) {
+        setIsOvertime(false);
+      }
     }
-  }, [currentTimeInSeconds, officialTime, isOvertime, recordingStatus]);
+  }, [currentTimeInSeconds, isOvertime]);
 
   // Reset overtime flag and timer when question changes + AUTO-START RECORDING
   useEffect(() => {
@@ -121,21 +126,15 @@ export const AuditionQuestionScreen = ({
       else {
         console.log('⏭️ No recording detected, skipping to next question...');
         
-        // Show transition
-        setIsTransitioning(true);
-        setTimeout(() => {
-          setIsTransitioning(false);
-          
-          // Advance to next question or complete
-          if (currentQuestionIndex < questions.length - 1) {
-            setCurrentQuestionIndex(currentQuestionIndex + 1);
-            resetRecording();
-            resetQuestionTimer();
-          } else {
-            console.log('🎉 All questions completed - navigating to survey');
-            onComplete();
-          }
-        }, 2000);
+        // Advance to next question or complete
+        if (currentQuestionIndex < questions.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+          resetRecording();
+          resetQuestionTimer();
+        } else {
+          console.log('🎉 All questions completed - navigating to survey');
+          onComplete();
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,12 +224,7 @@ export const AuditionQuestionScreen = ({
         description: `Question ${currentQuestionIndex + 1} recorded successfully!`,
       });
 
-      // 5. Show "Transitioning..." screen for 3 seconds
-      setIsTransitioning(true);
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      setIsTransitioning(false);
-
-      // 6. Advance to next question or complete
+      // Advance to next question or complete
       if (currentQuestionIndex < questions.length - 1) {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
         resetRecording();
@@ -248,7 +242,6 @@ export const AuditionQuestionScreen = ({
         description: error instanceof Error ? error.message : "Failed to submit answer. Please try again.",
         variant: "destructive",
       });
-      setIsTransitioning(false);
     } finally {
       setIsUploading(false);
     }
@@ -266,31 +259,19 @@ export const AuditionQuestionScreen = ({
         />
       )}
 
-      {/* Transitioning Screen */}
-      {isTransitioning && (
-        <Card className="w-full max-w-2xl">
-          <CardContent className="flex flex-col items-center justify-center py-16 space-y-4">
-            <Loader2 className="h-16 w-16 animate-spin text-primary" />
-            <h2 className="text-2xl font-bold">Transitioning to Next Question...</h2>
-            <p className="text-muted-foreground">Please wait a moment</p>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Main Question Screen */}
-      {!isTransitioning && (
-        <Card className="w-full max-w-4xl">
-          <CardHeader className="space-y-4">
-            {/* Master Clock Display */}
-            <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-4 py-2">
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-primary" />
-                <span className="font-semibold">Exam Time Remaining:</span>
-              </div>
-              <span className="text-2xl font-mono font-bold text-primary">
-                {masterTimer}
-              </span>
+      <Card className="w-full max-w-4xl">
+        <CardHeader className="space-y-4">
+          {/* Master Clock Display */}
+          <div className="flex items-center justify-between bg-primary/10 border border-primary/20 rounded-lg px-4 py-2">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-primary" />
+              <span className="font-semibold">Exam Time Remaining:</span>
             </div>
+            <span className="text-2xl font-mono font-bold text-primary">
+              {masterTimer}
+            </span>
+          </div>
 
             {/* Progress Indicator */}
             <div className="space-y-2">
@@ -395,7 +376,6 @@ export const AuditionQuestionScreen = ({
             </div>
           </CardContent>
         </Card>
-      )}
     </div>
   );
 };

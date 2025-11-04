@@ -144,6 +144,84 @@ const DUMMY_OPPORTUNITIES = [
       { question_text: "What hardware do you prefer for training?", time_limit_seconds: 60 },
       { question_text: "Why VisionFlow AI?", time_limit_seconds: 90 }
     ]
+  },
+  {
+    id: "550e8400-e29b-41d4-a716-446655440007",
+    title: "UX/UI Designer",
+    company: "DesignHub Co",
+    location: "Remote (Australia)",
+    type: "Full-time",
+    rate: "$65-90/hr",
+    skills: ["Figma", "User Research", "Prototyping", "Design Systems", "Interaction Design"],
+    questions: [
+      { question_text: "Tell us about your design background.", time_limit_seconds: 90 },
+      { question_text: "What's your design process from concept to delivery?", time_limit_seconds: 120 },
+      { question_text: "How do you conduct user research?", time_limit_seconds: 90 },
+      { question_text: "Describe your experience with Figma.", time_limit_seconds: 90 },
+      { question_text: "How do you handle design feedback?", time_limit_seconds: 120 },
+      { question_text: "What's your approach to creating design systems?", time_limit_seconds: 90 },
+      { question_text: "How do you ensure accessibility in your designs?", time_limit_seconds: 90 },
+      { question_text: "Describe a challenging design problem you solved.", time_limit_seconds: 120 },
+      { question_text: "How do you balance aesthetics with usability?", time_limit_seconds: 90 },
+      { question_text: "What's your experience with prototyping?", time_limit_seconds: 90 },
+      { question_text: "How do you work with developers?", time_limit_seconds: 90 },
+      { question_text: "Describe your mobile design experience.", time_limit_seconds: 90 },
+      { question_text: "How do you measure design success?", time_limit_seconds: 90 },
+      { question_text: "What design tools do you use daily?", time_limit_seconds: 60 },
+      { question_text: "Why DesignHub Co?", time_limit_seconds: 90 }
+    ]
+  },
+  {
+    id: "550e8400-e29b-41d4-a716-446655440008",
+    title: "Blockchain Developer",
+    company: "CryptoTech Labs",
+    location: "Remote (Singapore)",
+    type: "Contract",
+    rate: "$100-140/hr",
+    skills: ["Solidity", "Web3.js", "Smart Contracts", "Ethereum", "DeFi"],
+    questions: [
+      { question_text: "Introduce yourself and your blockchain experience.", time_limit_seconds: 90 },
+      { question_text: "What's your experience with smart contract development?", time_limit_seconds: 120 },
+      { question_text: "How do you ensure smart contract security?", time_limit_seconds: 90 },
+      { question_text: "Describe your experience with Solidity.", time_limit_seconds: 90 },
+      { question_text: "How do you approach gas optimization?", time_limit_seconds: 120 },
+      { question_text: "What's your experience with DeFi protocols?", time_limit_seconds: 90 },
+      { question_text: "How do you handle blockchain scalability?", time_limit_seconds: 90 },
+      { question_text: "Describe your testing strategy for smart contracts.", time_limit_seconds: 120 },
+      { question_text: "What's your experience with Web3.js or ethers.js?", time_limit_seconds: 90 },
+      { question_text: "How do you handle contract upgrades?", time_limit_seconds: 90 },
+      { question_text: "Describe a complex blockchain project you built.", time_limit_seconds: 120 },
+      { question_text: "How do you approach tokenomics design?", time_limit_seconds: 90 },
+      { question_text: "What's your experience with different blockchains?", time_limit_seconds: 90 },
+      { question_text: "How do you stay updated with blockchain technology?", time_limit_seconds: 60 },
+      { question_text: "Why CryptoTech Labs?", time_limit_seconds: 90 }
+    ]
+  },
+  {
+    id: "550e8400-e29b-41d4-a716-446655440009",
+    title: "Mobile Developer (iOS/Android)",
+    company: "AppWorks Studio",
+    location: "Hybrid (Berlin)",
+    type: "Full-time",
+    rate: "€75-100/hr",
+    skills: ["Swift", "Kotlin", "React Native", "Mobile UI", "App Store Optimization"],
+    questions: [
+      { question_text: "Tell us about your mobile development journey.", time_limit_seconds: 90 },
+      { question_text: "What's your experience with iOS development?", time_limit_seconds: 120 },
+      { question_text: "How do you approach Android development?", time_limit_seconds: 90 },
+      { question_text: "Describe your experience with React Native.", time_limit_seconds: 90 },
+      { question_text: "How do you optimize app performance?", time_limit_seconds: 120 },
+      { question_text: "What's your approach to mobile UI design?", time_limit_seconds: 90 },
+      { question_text: "How do you handle offline functionality?", time_limit_seconds: 90 },
+      { question_text: "Describe your app testing strategy.", time_limit_seconds: 120 },
+      { question_text: "How do you manage app state?", time_limit_seconds: 90 },
+      { question_text: "What's your experience with push notifications?", time_limit_seconds: 90 },
+      { question_text: "How do you approach app security?", time_limit_seconds: 90 },
+      { question_text: "Describe your experience with app deployment.", time_limit_seconds: 120 },
+      { question_text: "How do you handle different screen sizes?", time_limit_seconds: 90 },
+      { question_text: "What mobile development tools do you prefer?", time_limit_seconds: 60 },
+      { question_text: "Why AppWorks Studio?", time_limit_seconds: 90 }
+    ]
   }
 ];
 
@@ -197,11 +275,12 @@ app.post('/api/audition/start', async (req, res) => {
       });
     }
     
-    // 1. Fetch Questions: Randomly select 12 questions from the question bank
-    console.log('📝 Fetching 12 random questions from database...');
+    // 1. Fetch Questions: Select 12 questions for the specific opportunity
+    console.log('📝 Fetching 12 questions for opportunity from database...');
     const { data: questions, error: questionsError } = await supabase
       .from('questions')
       .select('*')
+      .eq('opportunity_id', opportunityId)
       .limit(12);
     
     if (questionsError) {
