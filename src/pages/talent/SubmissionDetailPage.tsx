@@ -16,7 +16,7 @@ interface Answer {
   questionId: string;
   questionText: string;
   audioUrl: string;
-  transcript: string;
+  transcript: string | null;
   submittedAt: string;
 }
 
@@ -218,6 +218,7 @@ export const SubmissionDetailPage = () => {
                 questionNumber={index + 1}
                 questionText={answer.questionText}
                 audioUrl={answer.audioUrl}
+                transcript={answer.transcript}
               />
             ))}
           </div>

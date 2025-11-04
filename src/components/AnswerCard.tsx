@@ -1,17 +1,23 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Volume2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Volume2, FileText } from "lucide-react";
 
 interface AnswerCardProps {
   questionText: string;
   audioUrl: string;
+  transcript?: string | null;
   questionNumber?: number;
 }
 
 export const AnswerCard = ({ 
   questionText, 
-  audioUrl, 
+  audioUrl,
+  transcript,
   questionNumber 
 }: AnswerCardProps) => {
+  const [showTranscript, setShowTranscript] = useState(false);
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -23,7 +29,7 @@ export const AnswerCard = ({
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <audio 
           controls 
           src={audioUrl}
@@ -32,6 +38,24 @@ export const AnswerCard = ({
         >
           Your browser does not support the audio element.
         </audio>
+
+        {/* Transcript Toggle Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowTranscript(!showTranscript)}
+          className="w-full sm:w-auto"
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          {showTranscript ? "Hide" : "Show"} AI Transcript
+        </Button>
+
+        {/* Transcript Display */}
+        {showTranscript && (
+          <blockquote className="border-l-4 border-primary pl-4 py-2 text-sm text-muted-foreground italic bg-muted/30 rounded-r">
+            {transcript || "Transcription is still processing or was not available."}
+          </blockquote>
+        )}
       </CardContent>
     </Card>
   );
