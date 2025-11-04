@@ -461,19 +461,19 @@ export const SystemCheckStep = ({ onStart, onClose, onBack }: SystemCheckStepPro
           size="lg"
           className="flex-1 text-lg h-14 font-semibold"
           onClick={handleStartAudition}
-          disabled={!isCameraReady || !isMicReady}
+          disabled={false}
         >
-          {(isCameraReady && isMicReady) ? "Start Audition" : cameraError ? "Continue Anyway (Testing)" : "Waiting for Camera & Microphone..."}
+          {(isCameraReady && isMicReady) ? "Start Audition" : "Continue Anyway (Testing Mode)"}
         </Button>
       </div>
-      {(!isCameraReady || !isMicReady) && !cameraError && (
-        <p className="text-xs text-muted-foreground text-center">
-          Please allow camera and microphone access in your browser to continue
+      {(!isCameraReady || !isMicReady) && (
+        <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center">
+          ⚠️ System check not complete - You can continue anyway for testing purposes. Production requires camera & microphone access.
         </p>
       )}
-      {cameraError && (
-        <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center">
-          ⚠️ Camera verification skipped - This is for testing only. Production requires camera access.
+      {(isCameraReady && isMicReady) && (
+        <p className="text-xs text-green-600 dark:text-green-400 text-center">
+          ✓ All systems ready! You can start your audition.
         </p>
       )}
     </div>

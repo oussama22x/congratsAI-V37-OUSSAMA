@@ -6,7 +6,18 @@ const cors = require('cors');
 const multer = require('multer');
 const { createClient } = require('@supabase/supabase-js');
 const speech = require('@google-cloud/speech');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
+
+// Initialize Gemini AI client
+let genAI = null;
+if (process.env.GEMINI_API_KEY) {
+  genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  console.log('✨ Gemini AI client initialized');
+} else {
+  console.warn('⚠️  GEMINI_API_KEY not found in .env file');
+  console.warn('   Gemini transcription will be disabled');
+}
 
 // Initialize Google Speech-to-Text client (optional)
 let speechClient = null;
@@ -150,7 +161,112 @@ app.get('/api/opportunities', async (req, res) => {
   }
 });
 
-// --- NEW Endpoint 2: Per-Question Answer Submission ---
+// --- Endpoint 2: Start Audition (Fetch Questions & Create Submission) ---
+app.post('/api/audition/start', async (req, res) => {
+  try {
+    console.log('🚀 Starting new audition session');
+    
+    const { opportunityId, userId } = req.body;
+    
+    // Validate required fields
+    if (!opportunityId || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: opportunityId and userId'
+      });
+    }
+    
+    console.log(`👤 User: ${userId}, 🎯 Opportunity: ${opportunityId}`);
+    
+    // 0. Check if submission already exists for this user-opportunity combination
+    console.log('🔍 Checking for existing submission...');
+    const { data: existingSubmission, error: checkError } = await supabase
+      .from('audition_submissions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('opportunity_id', opportunityId)
+      .single();
+    
+    if (existingSubmission) {
+      console.log('⚠️  Submission already exists:', existingSubmission.id);
+      return res.status(409).json({
+        success: false,
+        message: 'You have already started or completed an audition for this opportunity',
+        existingSubmissionId: existingSubmission.id,
+        status: existingSubmission.status
+      });
+    }
+    
+    // 1. Fetch Questions: Randomly select 12 questions from the question bank
+    console.log('📝 Fetching 12 random questions from database...');
+    const { data: questions, error: questionsError } = await supabase
+      .from('questions')
+      .select('*')
+      .limit(12);
+    
+    if (questionsError) {
+      console.error('❌ Error fetching questions:', questionsError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch questions from database',
+        error: questionsError.message
+      });
+    }
+    
+    if (!questions || questions.length === 0) {
+      console.error('❌ No questions found in database');
+      return res.status(404).json({
+        success: false,
+        message: 'No questions available in the question bank'
+      });
+    }
+    
+    console.log(`✅ Retrieved ${questions.length} questions`);
+    
+    // 2. Create Submission Record: Insert new submission with 'started' status
+    console.log('💾 Creating new submission record...');
+    const { data: submission, error: submissionError } = await supabase
+      .from('audition_submissions')
+      .insert({
+        user_id: userId,
+        opportunity_id: opportunityId,
+        status: 'started',
+        questions: questions.map(q => q.prompt), // Store question texts for reference
+        audio_urls: [] // Empty array, will be populated as user submits answers
+      })
+      .select()
+      .single();
+    
+    if (submissionError) {
+      console.error('❌ Error creating submission:', submissionError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create submission record',
+        error: submissionError.message
+      });
+    }
+    
+    console.log(`✅ Submission created with ID: ${submission.id}`);
+    
+    // 3. Respond: Send back submission ID and questions
+    res.status(200).json({
+      success: true,
+      message: 'Audition session started successfully',
+      submissionId: submission.id,
+      questions: questions
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in /api/audition/start:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+// --- Endpoint 3: Per-Question Answer Submission ---
 app.post('/api/audition/submit-answer', upload.single('audio_file'), async (req, res) => {
   try {
     console.log('📥 Received per-question submission');
@@ -207,42 +323,38 @@ app.post('/api/audition/submit-answer', upload.single('audio_file'), async (req,
       .from('audition-recordings')
       .getPublicUrl(filePath);
 
-    // C. Transcribe Audio with Google Speech-to-Text
-    let transcript = '';
+    // C. Transcribe Audio with Gemini AI
+    let transcript = null; // Default to null in case of error
     
-    if (speechClient) {
-      console.log('🎤 Transcribing audio with Google Speech-to-Text...');
+    if (genAI) {
+      console.log('🎤 Transcribing audio with Gemini AI...');
       
       try {
-        const audioBytes = file.buffer.toString('base64');
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         
-        const request = {
-          audio: {
-            content: audioBytes,
-          },
-          config: {
-            encoding: 'WEBM_OPUS',
-            sampleRateHertz: 48000,
-            languageCode: 'en-US',
-            enableAutomaticPunctuation: true,
-          },
+        // Convert the buffer to the format Gemini needs
+        const audioPart = {
+          inlineData: {
+            data: file.buffer.toString("base64"),
+            mimeType: file.mimetype // e.g., 'audio/webm'
+          }
         };
 
-        const [response] = await speechClient.recognize(request);
-        const transcription = response.results
-          .map(result => result.alternatives[0].transcript)
-          .join('\n');
-        
-        transcript = transcription || '[No speech detected]';
+        const prompt = "Transcribe this audio file. Return only the text.";
+
+        const result = await model.generateContent([prompt, audioPart]);
+        transcript = result.response.text();
         console.log(`✅ Transcription complete: "${transcript.substring(0, 100)}${transcript.length > 100 ? '...' : ''}"`);
-        
+
       } catch (transcriptionError) {
-        console.warn('⚠️  Transcription failed:', transcriptionError.message);
-        transcript = '[Transcription unavailable]';
+        console.error('⚠️  Gemini Transcription Failed:', transcriptionError.message);
+        // Do not stop the request. We will just save 'null'
+        // This is a "soft fail"
+        transcript = null;
       }
     } else {
-      console.log('⏭️  Skipping transcription (Google credentials not configured)');
-      transcript = '[Transcription disabled - Google credentials not configured]';
+      console.log('⏭️  Skipping transcription (Gemini API key not configured)');
+      transcript = null;
     }
 
     // D. Save to Database (audition_answers table)

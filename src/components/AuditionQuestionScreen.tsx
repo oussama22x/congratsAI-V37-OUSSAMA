@@ -21,6 +21,7 @@ interface AuditionQuestionScreenProps {
   questions: Question[];
   opportunityId: string;
   userId: string;
+  submissionId?: string; // NEW: Submission ID from backend
   cameraStream?: MediaStream | null;
   onComplete: () => void;
 }
@@ -29,6 +30,7 @@ export const AuditionQuestionScreen = ({
   questions,
   opportunityId,
   userId,
+  submissionId, // NEW: Receive submissionId as prop
   cameraStream,
   onComplete 
 }: AuditionQuestionScreenProps) => {
@@ -36,7 +38,6 @@ export const AuditionQuestionScreen = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isOvertime, setIsOvertime] = useState(false); // NEW: Overtime warning state
-  const [hasRecordingStarted, setHasRecordingStarted] = useState(false); // NEW: Track if recording has started
   const { toast } = useToast();
   
   // Audio recording hook
@@ -60,10 +61,10 @@ export const AuditionQuestionScreen = ({
   
   // Handle both frontend and backend question formats
   const questionText = currentQuestion.text || currentQuestion.question_text || 'Question';
-  const officialTime = currentQuestion.duration || currentQuestion.time_limit_seconds || 60; // Official time limit
-  const hardLimit = 120; // Always 2 minutes hard limit
+  const officialTime = 90; // Official time is now 90 seconds (matches hard limit)
+  const hardLimit = 90; // Hard limit changed to 90 seconds
   
-  // Per-Question Timer: Countdown from 120 seconds (hard limit)
+  // Per-Question Timer: Countdown from 90 seconds (hard limit)
   const { 
     timer: questionTimer,
     rawTimer: currentTimeInSeconds, // Get raw seconds value
@@ -71,7 +72,7 @@ export const AuditionQuestionScreen = ({
     startTimer: startQuestionTimer,
     stopTimer: stopQuestionTimer,
     resetTimer: resetQuestionTimer 
-  } = useCountdownTimer(hardLimit); // Always start at 120 seconds
+  } = useCountdownTimer(hardLimit); // Now starts at 90 seconds
 
   const progressPercentage = ((currentQuestionIndex + 1) / questions.length) * 100;
 
@@ -89,12 +90,16 @@ export const AuditionQuestionScreen = ({
     }
   }, [currentTimeInSeconds, officialTime, isOvertime, recordingStatus]);
 
-  // Reset overtime flag and timer when question changes
+  // Reset overtime flag and timer when question changes + AUTO-START RECORDING
   useEffect(() => {
     console.log(`🔄 Question changed to ${currentQuestionIndex + 1}, resetting overtime state`);
     setIsOvertime(false);
-    setHasRecordingStarted(false); // Reset question visibility for new question
     resetQuestionTimer();
+    
+    // Auto-start recording when question appears
+    console.log('🎤 Auto-starting recording for new question...');
+    startRecording();
+    startQuestionTimer();
   }, [currentQuestionIndex]);
 
   // Auto-advance when question timer expires
@@ -156,13 +161,6 @@ export const AuditionQuestionScreen = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleStartRecording = () => {
-    setIsOvertime(false); // Reset overtime when starting recording
-    setHasRecordingStarted(true); // Show the question text and start timer
-    startRecording();
-    startQuestionTimer();
-  };
-
   const handleStopRecording = () => {
     stopRecording();
     stopQuestionTimer();
@@ -199,6 +197,12 @@ export const AuditionQuestionScreen = ({
       formData.append('opportunityId', opportunityId);
       formData.append('questionId', currentQuestion.id);
       formData.append('questionText', questionText);
+      
+      // NEW: Include submissionId if available
+      if (submissionId) {
+        formData.append('submissionId', submissionId);
+        console.log('📝 Including submission ID:', submissionId);
+      }
 
       console.log('📤 Uploading answer for question:', currentQuestion.id);
 
@@ -231,7 +235,6 @@ export const AuditionQuestionScreen = ({
         setCurrentQuestionIndex(currentQuestionIndex + 1);
         resetRecording();
         resetQuestionTimer();
-        setHasRecordingStarted(false); // Reset for next question
       } else {
         // Last question - navigate to survey
         console.log('🎉 All questions completed - navigating to survey');
@@ -306,15 +309,9 @@ export const AuditionQuestionScreen = ({
           <CardContent className="space-y-8">
             {/* Question Text */}
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-8 text-center">
-              {!hasRecordingStarted ? (
-                <h2 className="text-3xl font-bold leading-relaxed text-muted-foreground">
-                  Click the record button to see the question and start the timer.
-                </h2>
-              ) : (
-                <h2 className="text-3xl font-bold leading-relaxed">
-                  {questionText}
-                </h2>
-              )}
+              <h2 className="text-3xl font-bold leading-relaxed">
+                {questionText}
+              </h2>
             </div>
 
             {/* Per-Question Timer - Countdown with Overtime Glow */}
@@ -337,24 +334,6 @@ export const AuditionQuestionScreen = ({
 
             {/* Recording Controls */}
             <div className="space-y-4">
-              {recordingStatus === "idle" && (
-                <>
-                  <div className="flex justify-center">
-                    <Button
-                      size="lg"
-                      className="h-24 w-24 rounded-full"
-                      onClick={handleStartRecording}
-                      disabled={isUploading}
-                    >
-                      <Mic className="h-12 w-12" />
-                    </Button>
-                  </div>
-                  <p className="text-center text-sm text-muted-foreground">
-                    Click to start recording your answer (2 minutes max)
-                  </p>
-                </>
-              )}
-
               {recordingStatus === "recording" && (
                 <>
                   <div className="flex justify-center">

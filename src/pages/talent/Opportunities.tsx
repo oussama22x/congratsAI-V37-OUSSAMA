@@ -181,7 +181,7 @@ const Opportunities = () => {
     }
   };
 
-  const handleBeginAudition = (cameraStream: MediaStream | null) => {
+  const handleBeginAudition = async (cameraStream: MediaStream | null) => {
     console.log("🎬 Beginning audition with camera stream:", cameraStream);
     if (cameraStream) {
       console.log("Stream active:", cameraStream.active);
@@ -195,7 +195,77 @@ const Opportunities = () => {
       })));
     }
     cameraStreamRef.current = cameraStream;
-    setAuditionInProgress(true);
+    
+    // Call the new /api/audition/start endpoint
+    if (!selectedOpportunity || !currentUser?.id) {
+      console.error('❌ Missing opportunity or user ID');
+      toast({
+        title: "Error",
+        description: "Unable to start audition. Missing required information.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      console.log('🚀 Calling /api/audition/start endpoint...');
+      console.log('👤 User ID:', currentUser.id);
+      console.log('🎯 Opportunity ID:', selectedOpportunity.id);
+      
+      const response = await fetch(`${BACKEND_URL}/api/audition/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          opportunityId: selectedOpportunity.id,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to start audition');
+      }
+
+      console.log('✅ Audition started successfully');
+      console.log('📝 Submission ID:', result.submissionId);
+      console.log('📋 Questions received:', result.questions.length);
+      
+      // Save submissionId and questions to state
+      setSubmissionId(result.submissionId);
+      
+      // Transform questions from backend format to frontend format
+      const transformedQuestions = result.questions.map((q: any, index: number) => ({
+        id: q.id || `q${index + 1}`,
+        text: q.prompt || q.text,
+        duration: q.time_limit_seconds || 90,
+      }));
+      
+      // Update selected opportunity with real questions
+      setSelectedOpportunity({
+        ...selectedOpportunity,
+        questions: transformedQuestions,
+      });
+      
+      // Start the audition
+      setAuditionInProgress(true);
+      
+    } catch (error) {
+      console.error('❌ Error starting audition:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to start audition. Please try again.",
+        variant: "destructive",
+      });
+      
+      // Clean up camera stream on error
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+      cameraStreamRef.current = null;
+    }
   };
 
   // NEW: Handler when all questions are completed
@@ -311,6 +381,7 @@ const Opportunities = () => {
         questions={selectedOpportunity.questions}
         opportunityId={selectedOpportunity.id}
         userId={currentUser.id}
+        submissionId={submissionId || undefined} // NEW: Pass submissionId
         cameraStream={cameraStreamRef.current}
         onComplete={handleQuestionsComplete}
       />
